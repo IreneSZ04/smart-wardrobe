@@ -292,3 +292,25 @@
     align-items: start;
   }
 }
+
+
+.edit-button {
+  border: 1px solid #7b8060;
+  background: transparent;
+  color: #626849;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.edit-button:hover {
+  background: #eeeee5;
+}
+
+.clothing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
