@@ -20,6 +20,9 @@ export interface ClothingItem {
   category: ClothingCategory
   color: string
   season: string
+  brand?: string
+  size?: string
+  material?: string
   image?: Blob
   createdAt: string
 }
@@ -30,6 +33,9 @@ interface BackupClothingItem {
   category: ClothingCategory
   color: string
   season: string
+  brand?: string
+  size?: string
+  material?: string
   image?: string
   createdAt: string
 }
@@ -128,6 +134,9 @@ export async function createBackupJson(): Promise<string> {
         category: item.category,
         color: item.color,
         season: item.season,
+        brand: item.brand ?? '',
+        size: item.size ?? '',
+        material: item.material ?? '',
         createdAt: item.createdAt,
       }
 
@@ -189,6 +198,9 @@ async function parseBackupJson(jsonText: string): Promise<ClothingItem[]> {
         typeof item.color !== 'string' ||
         typeof item.season !== 'string' ||
         typeof item.createdAt !== 'string' ||
+        (item.brand !== undefined && typeof item.brand !== 'string') ||
+        (item.size !== undefined && typeof item.size !== 'string') ||
+        (item.material !== undefined && typeof item.material !== 'string') ||
         (item.image !== undefined && typeof item.image !== 'string')
       ) {
         throw new Error(
@@ -202,6 +214,9 @@ async function parseBackupJson(jsonText: string): Promise<ClothingItem[]> {
         category: item.category,
         color: item.color,
         season: item.season,
+        brand: item.brand ?? '',
+        size: item.size ?? '',
+        material: item.material ?? '',
         createdAt: item.createdAt,
       }
 
@@ -226,7 +241,7 @@ async function importBackup(
   jsonText: string,
   mode: ImportMode,
 ): Promise<number> {
-  // Validar toda la copia antes de tocar el armario actual.
+  // Validar toda la copia antes de modificar el armario.
   const restoredItems = await parseBackupJson(jsonText)
   const db = await database
   const transaction = db.transaction(STORE_NAME, 'readwrite')

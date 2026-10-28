@@ -40,6 +40,9 @@ const EMPTY_FORM = {
   category: 'Camisetas' as ClothingCategory,
   color: '',
   season: 'Todo el año',
+  brand: '',
+  size: '',
+  material: '',
 }
 
 type ImportMode = 'merge' | 'replace'
@@ -184,6 +187,9 @@ export default function Wardrobe() {
       category: item.category,
       color: item.color,
       season: item.season,
+      brand: item.brand ?? '',
+      size: item.size ?? '',
+      material: item.material ?? '',
     })
     setSelectedImage(undefined)
     setError('')
@@ -221,6 +227,9 @@ export default function Wardrobe() {
         category: form.category,
         color: form.color.trim(),
         season: form.season,
+        brand: form.brand.trim(),
+        size: form.size.trim(),
+        material: form.material.trim(),
         createdAt: existingItem?.createdAt ?? new Date().toISOString(),
         ...(selectedImage
           ? { image: selectedImage }
@@ -364,7 +373,10 @@ export default function Wardrobe() {
       !searchText ||
       item.name.toLocaleLowerCase('es').includes(searchText) ||
       item.color.toLocaleLowerCase('es').includes(searchText) ||
-      item.category.toLocaleLowerCase('es').includes(searchText)
+      item.category.toLocaleLowerCase('es').includes(searchText) ||
+      (item.brand ?? '').toLocaleLowerCase('es').includes(searchText) ||
+      (item.size ?? '').toLocaleLowerCase('es').includes(searchText) ||
+      (item.material ?? '').toLocaleLowerCase('es').includes(searchText)
 
     return matchesCategory && matchesSeason && matchesSearch
   })
@@ -419,7 +431,6 @@ export default function Wardrobe() {
               value={form.name}
               onChange={handleTextChange}
               maxLength={100}
-              required
             />
           </div>
 
@@ -466,6 +477,45 @@ export default function Wardrobe() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="clothing-brand">Marca</label>
+            <input
+              id="clothing-brand"
+              name="brand"
+              type="text"
+              placeholder="Ej. Levi's"
+              value={form.brand}
+              onChange={handleTextChange}
+              maxLength={60}
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="clothing-size">Talla</label>
+            <input
+              id="clothing-size"
+              name="size"
+              type="text"
+              placeholder="Ej. M, 38, 42"
+              value={form.size}
+              onChange={handleTextChange}
+              maxLength={30}
+            />
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="clothing-material">Material</label>
+            <input
+              id="clothing-material"
+              name="material"
+              type="text"
+              placeholder="Ej. Algodón"
+              value={form.material}
+              onChange={handleTextChange}
+              maxLength={100}
+            />
           </div>
 
           <div className="form-field form-field-full">
@@ -604,6 +654,27 @@ export default function Wardrobe() {
                     <span>Temporada</span>
                     {item.season}
                   </p>
+
+                  {item.brand && (
+                    <p className="clothing-detail">
+                      <span>Marca</span>
+                      {item.brand}
+                    </p>
+                  )}
+
+                  {item.size && (
+                    <p className="clothing-detail">
+                      <span>Talla</span>
+                      {item.size}
+                    </p>
+                  )}
+
+                  {item.material && (
+                    <p className="clothing-detail">
+                      <span>Material</span>
+                      {item.material}
+                    </p>
+                  )}
 
                   <div className="clothing-card-actions">
                     <button
