@@ -1,15 +1,25 @@
 
-import { useEffect, useState, type FormEvent } from 'react'
 import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
+
+import {
+  createBackupJson,
   deleteClothingItem,
   getClothingItems,
+  replaceWardrobeFromBackupJson,
+  restoreBackupJson,
   saveClothingItem,
   type ClothingCategory,
   type ClothingItem,
 } from './lib/wardrobe'
+
 import './Wardrobe.css'
 
-const categories: ClothingCategory[] = [
+const CATEGORIES: ClothingCategory[] = [
   'Camisetas',
   'Camisas',
   'Pantalones',
@@ -23,96 +33,167 @@ const categories: ClothingCategory[] = [
   'Otros',
 ]
 
-const seasons = [
-  'Primavera',
-  'Verano',
-  'Otoño',
-  'Invierno',
-  'Todo el año',
-]
+const SEASONS = ['Primavera', 'Verano', 'Otoño', 'Invierno', 'Todo el año']
 
-function Wardrobe() {
+const EMPTY_FORM = {
+  name: '',
+  category: 'Camisetas' as ClothingCategory,
+  color: '',
+  season: 'Todo el año',
+}
+
+type ImportMode = 'merge' | 'replace'
+
+function ClothingImage({ image, name }: { image?: Blob; name: string }) {
+  const [imageUrl, setImageUrl] = useState('')
+
+  useEffect(() => {
+    if (!image) {
+      setImageUrl('')
+      return
+    }
+
+    const url = URL.createObjectURL(image)
+    setImageUrl(url)
+
+    return () => URL.revokeObjectURL(url)
+  }, [image])
+
+  if (!imageUrl) {
+    return (
+      <div className="clothing-image clothing-image-empty">
+        Sin fotografía
+      </div>
+    )
+  }
+
+  return (
+    <img
+      className="clothing-image"
+      src={imageUrl}
+      alt={name}
+    />
+  )
+}
+
+export default function Wardrobe() {
   const [items, setItems] = useState<ClothingItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [filter, setFilter] = useState('Todas')
-
-  const [name, setName] = useState('')
-  const [category, setCategory] =
-    useState<ClothingCategory>('Camisetas')
-  const [color, setColor] = useState('')
-  const [season, setSeason] = useState('Todo el año')
-
-  const [photo, setPhoto] = useState<Blob | undefined>()
-  const [existingImage, setExistingImage] = useState<Blob | undefined>()
-  const [photoPreview, setPhotoPreview] = useState('')
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [selectedImage, setSelectedImage] = useState<File | undefined>()
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  const [categoryFilter, setCategoryFilter] = useState('Todas')
+  const [seasonFilter, setSeasonFilter] = useState('Todas')
+  const [search, setSearch] = useState('')
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  async function refreshItems() {
+    const savedItems = await getClothingItems()
+    setItems(
+      savedItems.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() -
+          new Date(a.createdAt).getTime(),
+      ),
+    )
+  }
 
   useEffect(() => {
     let active = true
 
-    getClothingItems()
-      .then((storedItems) => {
-        if (active) setItems(storedItems)
-      })
-      .catch(() => {
-        if (active) setError('No se pudo cargar el armario.')
-      })
-      .finally(() => {
+    async function loadItems() {
+      try {
+        const savedItems = await getClothingItems()
+
+        if (active) {
+          setItems(
+            savedItems.sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
+            ),
+          )
+        }
+      } catch {
+        if (active) {
+          setError('No se ha podido cargar el armario.')
+        }
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
+
+    void loadItems()
 
     return () => {
       active = false
     }
   }, [])
 
-  useEffect(() => {
-    const imageToPreview = photo ?? existingImage
+  function resetForm() {
+    setForm(EMPTY_FORM)
+    setSelectedImage(undefined)
+    setEditingId(null)
 
-    if (!imageToPreview) {
-      setPhotoPreview('')
+    const fileInput = document.getElementById(
+      'clothing-photo',
+    ) as HTMLInputElement | null
+
+    if (fileInput) fileInput.value = ''
+  }
+
+  function handleTextChange(
+    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) {
+    const { name, value } = event.target
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }))
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      setSelectedImage(undefined)
       return
     }
 
-    const url = URL.createObjectURL(imageToPreview)
-    setPhotoPreview(url)
-
-    return () => URL.revokeObjectURL(url)
-  }, [photo, existingImage])
-
-  function resetForm() {
-    setEditingId(null)
-    setName('')
-    setCategory('Camisetas')
-    setColor('')
-    setSeason('Todo el año')
-    setPhoto(undefined)
-    setExistingImage(undefined)
-    setError('')
-
-    const input = document.getElementById('clothing-photo')
-
-    if (input instanceof HTMLInputElement) {
-      input.value = ''
+    if (!file.type.startsWith('image/')) {
+      setError('Selecciona un archivo de imagen válido.')
+      event.target.value = ''
+      setSelectedImage(undefined)
+      return
     }
+
+    setError('')
+    setSelectedImage(file)
   }
 
   function startEditing(item: ClothingItem) {
     setEditingId(item.id)
-    setName(item.name)
-    setCategory(item.category)
-    setColor(item.color)
-    setSeason(item.season)
-    setPhoto(undefined)
-    setExistingImage(item.image)
+    setForm({
+      name: item.name,
+      category: item.category,
+      color: item.color,
+      season: item.season,
+    })
+    setSelectedImage(undefined)
     setError('')
+    setNotice('')
 
-    const input = document.getElementById('clothing-photo')
+    const fileInput = document.getElementById(
+      'clothing-photo',
+    ) as HTMLInputElement | null
 
-    if (input instanceof HTMLInputElement) {
-      input.value = ''
-    }
+    if (fileInput) fileInput.value = ''
 
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -120,309 +201,493 @@ function Wardrobe() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setNotice('')
 
-    const currentItem = items.find((item) => item.id === editingId)
-
-    const item: ClothingItem = {
-      id: editingId ?? crypto.randomUUID(),
-      name: name.trim(),
-      category,
-      color: color.trim(),
-      season,
-      image: photo ?? existingImage,
-      createdAt: currentItem?.createdAt ?? new Date().toISOString(),
+    if (!form.name.trim()) {
+      setError('Escribe el nombre de la prenda.')
+      return
     }
 
+    setSaving(true)
+
     try {
+      const existingItem = editingId
+        ? items.find((item) => item.id === editingId)
+        : undefined
+
+      const item: ClothingItem = {
+        id: editingId ?? crypto.randomUUID(),
+        name: form.name.trim(),
+        category: form.category,
+        color: form.color.trim(),
+        season: form.season,
+        createdAt: existingItem?.createdAt ?? new Date().toISOString(),
+        ...(selectedImage
+          ? { image: selectedImage }
+          : existingItem?.image
+            ? { image: existingItem.image }
+            : {}),
+      }
+
       await saveClothingItem(item)
+      await refreshItems()
 
-      setItems((current) => {
-        const alreadyExists = current.some(
-          (existing) => existing.id === item.id,
-        )
-
-        return alreadyExists
-          ? current.map((existing) =>
-              existing.id === item.id ? item : existing,
-            )
-          : [item, ...current]
-      })
+      setNotice(
+        editingId
+          ? 'Prenda actualizada correctamente.'
+          : 'Prenda añadida al armario.',
+      )
 
       resetForm()
     } catch {
-      setError(
-        'No se pudo guardar la prenda. Comprueba el espacio disponible.',
-      )
+      setError('No se ha podido guardar la prenda.')
+    } finally {
+      setSaving(false)
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(item: ClothingItem) {
     const confirmed = window.confirm(
-      '¿Seguro que quieres eliminar esta prenda?',
+      `¿Quieres eliminar "${item.name}" del armario? Esta acción no se puede deshacer.`,
     )
 
     if (!confirmed) return
 
     setError('')
+    setNotice('')
 
     try {
-      await deleteClothingItem(id)
-      setItems((current) => current.filter((item) => item.id !== id))
+      await deleteClothingItem(item.id)
+      await refreshItems()
 
-      if (editingId === id) {
-        resetForm()
-      }
+      if (editingId === item.id) resetForm()
+
+      setNotice('Prenda eliminada.')
+
     } catch {
-      setError('No se pudo eliminar la prenda.')
+      setError('No se ha podido eliminar la prenda.')
     }
   }
 
-  const visibleItems =
-    filter === 'Todas'
-      ? items
-      : items.filter((item) => item.category === filter)
+  async function handleExport() {
+    setError('')
+    setNotice('')
+    setBackupBusy(true)
+
+    try {
+      const json = await createBackupJson()
+      const blob = new Blob([json], {
+        type: 'application/json;charset=utf-8',
+      })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+
+      link.href = url
+      link.download = `smart-wardrobe-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`
+
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      setNotice('Copia de seguridad exportada.')
+    } catch {
+      setError('No se ha podido exportar la copia de seguridad.')
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  async function handleImport(
+    event: ChangeEvent<HTMLInputElement>,
+    mode: ImportMode,
+  ) {
+    const file = event.target.files?.[0]
+
+    if (!file) return
+
+    setError('')
+    setNotice('')
+
+    const message =
+      mode === 'replace'
+        ? 'RESTAURACIÓN EXACTA: se eliminarán todas las prendas actuales que no estén en la copia. El armario quedará como estaba cuando se exportó el archivo. ¿Continuar?'
+        : 'Se importarán las prendas del archivo. Las que tengan el mismo identificador se actualizarán y las demás se conservarán. ¿Continuar?'
+
+    if (!window.confirm(message)) {
+      event.target.value = ''
+      return
+    }
+
+    setBackupBusy(true)
+
+    try {
+      const json = await file.text()
+
+      const restoredCount =
+        mode === 'replace'
+          ? await replaceWardrobeFromBackupJson(json)
+          : await restoreBackupJson(json)
+
+      await refreshItems()
+      resetForm()
+
+      setNotice(
+        mode === 'replace'
+          ? `Armario restaurado exactamente. ${restoredCount} prendas recuperadas.`
+          : `Copia fusionada. ${restoredCount} prendas importadas.`,
+      )
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : 'No se ha podido importar la copia de seguridad.',
+      )
+    } finally {
+      setBackupBusy(false)
+      event.target.value = ''
+    }
+  }
+
+  const visibleItems = items.filter((item) => {
+    const matchesCategory =
+      categoryFilter === 'Todas' || item.category === categoryFilter
+
+    const matchesSeason =
+      seasonFilter === 'Todas' || item.season === seasonFilter
+
+    const searchText = search.trim().toLocaleLowerCase('es')
+
+    const matchesSearch =
+      !searchText ||
+      item.name.toLocaleLowerCase('es').includes(searchText) ||
+      item.color.toLocaleLowerCase('es').includes(searchText) ||
+      item.category.toLocaleLowerCase('es').includes(searchText)
+
+    return matchesCategory && matchesSeason && matchesSearch
+  })
 
   return (
     <main className="wardrobe-page">
       <header className="wardrobe-header">
-        <a className="brand" href="#inicio">
-          <span className="brand-mark">S</span>
-          <span>smart wardrobe</span>
-        </a>
+        <div>
+          <p className="wardrobe-eyebrow">TU ESPACIO PERSONAL</p>
+          <h1>Smart Wardrobe</h1>
+          <p className="wardrobe-subtitle">
+            Todo tu armario, organizado en un solo lugar.
+          </p>
+        </div>
 
-        <span className="wardrobe-caption">
-          MI ESPACIO PERSONAL
-        </span>
+        <div className="wardrobe-count">
+          <span>Prendas</span>
+          <strong>{items.length}</strong>
+        </div>
       </header>
 
-      <section className="wardrobe-intro" id="inicio">
-        <p className="eyebrow">TU ROPA, ORGANIZADA</p>
-        <h1>
-          Mi armario<span>.</span>
-        </h1>
-        <p>Todo lo que tienes, en un solo lugar.</p>
-      </section>
+      {error && (
+        <div className="wardrobe-message wardrobe-error" role="alert">
+          {error}
+        </div>
+      )}
 
-      <section className="wardrobe-layout">
-        <aside className="add-panel">
-          <h2>{editingId ? 'Editar prenda' : 'Añadir prenda'}</h2>
+      {notice && (
+        <div className="wardrobe-message wardrobe-notice" role="status">
+          {notice}
+        </div>
+      )}
 
-          <p className="panel-description">
-            {editingId
-              ? 'Modifica los datos de esta prenda.'
-              : 'Registra una nueva pieza de tu armario.'}
-          </p>
+      <section className="wardrobe-section">
+        <div className="section-heading">
+          <div>
+            <p className="wardrobe-eyebrow">
+              {editingId ? 'MODIFICAR' : 'NUEVA PRENDA'}
+            </p>
+            <h2>{editingId ? 'Editar prenda' : 'Añadir al armario'}</h2>
+          </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="clothing-form">
-            <label htmlFor="clothing-name">Nombre de la prenda</label>
+        <form className="clothing-form" onSubmit={handleSubmit}>
+          <div className="form-field">
+            <label htmlFor="clothing-name">Nombre *</label>
             <input
               id="clothing-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              name="name"
+              type="text"
               placeholder="Ej. Camiseta blanca básica"
-              maxLength={80}
+              value={form.name}
+              onChange={handleTextChange}
+              maxLength={100}
               required
             />
+          </div>
 
+          <div className="form-field">
             <label htmlFor="clothing-category">Categoría</label>
             <select
               id="clothing-category"
-              value={category}
-              onChange={(event) =>
-                setCategory(event.target.value as ClothingCategory)
-              }
+              name="category"
+              value={form.category}
+              onChange={handleTextChange}
             >
-              {categories.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
                 </option>
               ))}
             </select>
+          </div>
 
+          <div className="form-field">
             <label htmlFor="clothing-color">Color</label>
             <input
               id="clothing-color"
-              value={color}
-              onChange={(event) => setColor(event.target.value)}
-              placeholder="Ej. Blanco"
-              maxLength={40}
-              required
+              name="color"
+              type="text"
+              placeholder="Ej. Negro"
+              value={form.color}
+              onChange={handleTextChange}
+              maxLength={60}
             />
+          </div>
 
+          <div className="form-field">
             <label htmlFor="clothing-season">Temporada</label>
             <select
               id="clothing-season"
-              value={season}
-              onChange={(event) => setSeason(event.target.value)}
+              name="season"
+              value={form.season}
+              onChange={handleTextChange}
             >
-              {seasons.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              {SEASONS.map((season) => (
+                <option key={season} value={season}>
+                  {season}
                 </option>
               ))}
             </select>
+          </div>
 
+          <div className="form-field form-field-full">
             <label htmlFor="clothing-photo">
-              Fotografía (opcional)
+              Fotografía {editingId ? '(opcional si quieres conservar la actual)' : '(opcional)'}
             </label>
             <input
               id="clothing-photo"
               type="file"
               accept="image/*"
-              onChange={(event) => {
-                setPhoto(event.target.files?.[0])
-              }}
+              onChange={handleImageChange}
             />
-
-            {photoPreview && (
-              <img
-                className="photo-preview"
-                src={photoPreview}
-                alt="Vista previa de la prenda"
-              />
+            {selectedImage && (
+              <p className="form-help">
+                Nueva fotografía: {selectedImage.name}
+              </p>
             )}
+          </div>
 
+          <div className="form-actions form-field-full">
             <button
-              className="button button-primary submit-button"
+              className="button button-primary"
               type="submit"
+              disabled={saving || loading}
             >
-              {editingId ? 'Guardar cambios' : 'Guardar prenda'}
+              {saving
+                ? 'Guardando...'
+                : editingId
+                  ? 'Guardar cambios'
+                  : 'Añadir prenda'}
             </button>
 
             {editingId && (
               <button
-                className="delete-button"
+                className="button"
                 type="button"
                 onClick={resetForm}
+                disabled={saving}
               >
                 Cancelar edición
               </button>
             )}
-          </form>
-        </aside>
+          </div>
+        </form>
+      </section>
 
-        <section className="inventory-panel">
-          <div className="inventory-heading">
-            <div>
-              <p className="eyebrow">TU COLECCIÓN</p>
-              <h2>
-                Prendas <span className="item-count">{items.length}</span>
-              </h2>
-            </div>
+      <section className="wardrobe-section">
+        <div className="section-heading">
+          <div>
+            <p className="wardrobe-eyebrow">ORGANIZACIÓN</p>
+            <h2>Mi armario</h2>
+          </div>
+          <span className="item-count">
+            {visibleItems.length} de {items.length} prendas
+          </span>
+        </div>
 
-            <label className="filter-control">
-              <span>Filtrar</span>
-              <select
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-              >
-                <option value="Todas">Todas</option>
-                {categories.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <div className="wardrobe-filters">
+          <div className="form-field">
+            <label htmlFor="wardrobe-search">Buscar</label>
+            <input
+              id="wardrobe-search"
+              type="search"
+              placeholder="Nombre, color o categoría"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
 
-          {error && (
-            <p className="error-message" role="alert">
-              {error}
-            </p>
-          )}
+          <div className="form-field">
+            <label htmlFor="filter-category">Categoría</label>
+            <select
+              id="filter-category"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="Todas">Todas las categorías</option>
+              {CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {loading ? (
-            <p className="empty-state">Cargando tu armario...</p>
-          ) : visibleItems.length === 0 ? (
-            <div className="empty-state">
-              <span className="empty-symbol">＋</span>
-              <h3>
-                {items.length === 0
-                  ? 'Tu armario empieza aquí'
-                  : 'No hay prendas en esta categoría'}
-              </h3>
-              <p>
-                {items.length === 0
-                  ? 'Añade tu primera prenda con el formulario.'
-                  : 'Prueba con otra categoría.'}
-              </p>
-            </div>
-          ) : (
-            <div className="clothing-grid">
-              {visibleItems.map((item) => (
-                <article className="clothing-card" key={item.id}>
-                  {item.image ? (
-                    <ClothingImage item={item} />
-                  ) : (
-                    <div className="clothing-placeholder">
-                      <span>{item.category}</span>
-                    </div>
+          <div className="form-field">
+            <label htmlFor="filter-season">Temporada</label>
+            <select
+              id="filter-season"
+              value={seasonFilter}
+              onChange={(event) => setSeasonFilter(event.target.value)}
+            >
+              <option value="Todas">Todas las temporadas</option>
+              {SEASONS.map((season) => (
+                <option key={season} value={season}>
+                  {season}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="wardrobe-empty">Cargando armario...</p>
+        ) : visibleItems.length === 0 ? (
+          <div className="wardrobe-empty">
+            <h3>
+              {items.length === 0
+                ? 'Tu armario está vacío'
+                : 'No hay prendas que coincidan'}
+            </h3>
+            <p>
+              {items.length === 0
+                ? 'Añade tu primera prenda con el formulario de arriba.'
+                : 'Prueba con otra búsqueda o cambia los filtros.'}
+            </p>
+          </div>
+        ) : (
+          <div className="clothing-grid">
+            {visibleItems.map((item) => (
+              <article className="clothing-card" key={item.id}>
+                <ClothingImage image={item.image} name={item.name} />
+
+                <div className="clothing-card-content">
+                  <span className="clothing-category">{item.category}</span>
+                  <h3>{item.name}</h3>
+
+                  {item.color && (
+                    <p className="clothing-detail">
+                      <span>Color</span>
+                      {item.color}
+                    </p>
                   )}
 
-                  <div className="clothing-details">
-                    <h3>{item.name}</h3>
-                    <p>
-                      {item.color} · {item.season}
-                    </p>
-                    <span className="category-tag">{item.category}</span>
+                  <p className="clothing-detail">
+                    <span>Temporada</span>
+                    {item.season}
+                  </p>
 
-                    <div className="clothing-actions">
-                      <button
-                        className="edit-button"
-                        type="button"
-                        onClick={() => startEditing(item)}
-                        aria-label={`Editar ${item.name}`}
-                      >
-                        Editar
-                      </button>
+                  <div className="clothing-card-actions">
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => startEditing(item)}
+                    >
+                      Editar
+                    </button>
 
-                      <button
-                        className="delete-button"
-                        type="button"
-                        onClick={() => void handleDelete(item.id)}
-                        aria-label={`Eliminar ${item.name}`}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+                    <button
+                      className="button button-danger"
+                      type="button"
+                      onClick={() => void handleDelete(item)}
+                    >
+                      Eliminar
+                    </button>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="wardrobe-section backup-section">
+        <div className="section-heading">
+          <div>
+            <p className="wardrobe-eyebrow">TUS DATOS</p>
+            <h2>Copias de seguridad</h2>
+          </div>
+        </div>
+
+        <p className="backup-description">
+          Exporta el armario a un archivo JSON para guardarlo o recuperarlo
+          más adelante. Las fotografías también se incluyen en la copia.
+        </p>
+
+        <div className="backup-actions">
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={() => void handleExport()}
+            disabled={backupBusy || loading}
+          >
+            {backupBusy ? 'Procesando...' : 'Exportar copia'}
+          </button>
+
+          <label className="button backup-import-button">
+            Fusionar copia
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(event) => void handleImport(event, 'merge')}
+              disabled={backupBusy || loading}
+              hidden
+            />
+          </label>
+
+          <label className="button backup-replace-button">
+            Restaurar exactamente
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(event) => void handleImport(event, 'replace')}
+              disabled={backupBusy || loading}
+              hidden
+            />
+          </label>
+        </div>
+
+        <p className="backup-help">
+          <strong>Fusionar copia:</strong> conserva las prendas actuales que
+          no estén en el archivo. Si una prenda comparte identificador con
+          otra de la copia, se actualiza.
+        </p>
+
+        <p className="backup-help">
+          <strong>Restaurar exactamente:</strong> sustituye el contenido
+          actual por el de la copia. Las prendas añadidas después de exportar
+          desaparecerán. Haz una copia antes de usar esta opción si quieres
+          conservarlas.
+        </p>
       </section>
     </main>
   )
 }
-
-function ClothingImage({ item }: { item: ClothingItem }) {
-  const [imageUrl, setImageUrl] = useState('')
-
-  useEffect(() => {
-    if (!item.image) {
-      setImageUrl('')
-      return
-    }
-
-    const url = URL.createObjectURL(item.image)
-    setImageUrl(url)
-
-    return () => URL.revokeObjectURL(url)
-  }, [item.image])
-
-  if (!imageUrl) {
-    return <div className="clothing-placeholder"><span>{item.category}</span></div>
-  }
-
-  return (
-    <img
-      className="clothing-image"
-      src={imageUrl}
-      alt={item.name}
-    />
-  )
-}
-
-export default Wardrobe
