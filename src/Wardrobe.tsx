@@ -91,6 +91,7 @@ export default function Wardrobe() {
   const [sizeFilter, setSizeFilter] = useState('Todas')
   const [materialFilter, setMaterialFilter] = useState('Todas')
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('newest')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -401,6 +402,32 @@ export default function Wardrobe() {
     )
   })
 
+  const sortedItems = [...visibleItems].sort((a, b) => {
+  switch (sortBy) {
+    case 'name':
+      return a.name.localeCompare(b.name, 'es')
+
+    case 'brand':
+      return (a.brand ?? '').localeCompare(b.brand ?? '', 'es')
+
+    case 'category':
+      return a.category.localeCompare(b.category, 'es')
+
+    case 'oldest':
+      return (
+        new Date(a.createdAt).getTime() -
+        new Date(b.createdAt).getTime()
+      )
+
+    case 'newest':
+    default:
+      return (
+        new Date(b.createdAt).getTime() -
+        new Date(a.createdAt).getTime()
+      )
+  }
+})
+
   return (
     <main className="wardrobe-page">
       <header className="wardrobe-header">
@@ -670,21 +697,44 @@ export default function Wardrobe() {
           </div>
 
           <div className="form-field">
-            <label htmlFor="filter-material">Material</label>
+  <label htmlFor="filter-material">Material</label>
+  <select
+    id="filter-material"
+    value={materialFilter}
+    onChange={(event) => setMaterialFilter(event.target.value)}
+  >
+    <option value="Todas">Todos los materiales</option>
+    {Array.from(
+      new Set(
+        items
+          .map((item) => item.material)
+          .filter((material): material is string => Boolean(material))
+      )
+    )
+      .sort((a, b) => a.localeCompare(b, 'es'))
+      .map((material) => (
+        <option key={material} value={material}>
+          {material}
+        </option>
+      ))}
+  </select>
+</div>
+
+          <div className="form-field">
+            <label htmlFor="wardrobe-sort">Ordenar por</label>
             <select
-              id="filter-material"
-              value={materialFilter}
-              onChange={(event) => setMaterialFilter(event.target.value)}
+              id="wardrobe-sort"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
             >
-              <option value="Todas">Todos los materiales</option>
-              {[...new Set(items.map((item) => item.material).filter((material): material is string => Boolean(material)))].sort((a, b) => a.localeCompare(b, 'es')).map((material) => (
-                <option key={material} value={material}>
-                  {material}
-                </option>
-              ))}
+              <option value="newest">Más recientes</option>
+              <option value="oldest">Más antiguas</option>
+              <option value="name">Nombre (A-Z)</option>
+              <option value="brand">Marca (A-Z)</option>
+              <option value="category">Categoría (A-Z)</option>
             </select>
           </div>
-        </div>
+          </div>
 
         {loading ? (
           <p className="wardrobe-empty">Cargando armario...</p>
@@ -703,7 +753,7 @@ export default function Wardrobe() {
           </div>
         ) : (
           <div className="clothing-grid">
-            {visibleItems.map((item) => (
+            {sortedItems.map((item) => (
               <article className="clothing-card" key={item.id}>
                 <ClothingImage image={item.image} name={item.name} />
 
