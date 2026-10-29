@@ -87,6 +87,9 @@ export default function Wardrobe() {
 
   const [categoryFilter, setCategoryFilter] = useState('Todas')
   const [seasonFilter, setSeasonFilter] = useState('Todas')
+  const [brandFilter, setBrandFilter] = useState('Todas')
+  const [sizeFilter, setSizeFilter] = useState('Todas')
+  const [materialFilter, setMaterialFilter] = useState('Todas')
   const [search, setSearch] = useState('')
 
   const [loading, setLoading] = useState(true)
@@ -379,7 +382,23 @@ export default function Wardrobe() {
       (item.size ?? '').toLocaleLowerCase('es').includes(searchText) ||
       (item.material ?? '').toLocaleLowerCase('es').includes(searchText)
 
-    return matchesCategory && matchesSeason && matchesSearch
+    const matchesBrand =
+      brandFilter === 'Todas' || (item.brand ?? '') === brandFilter
+
+    const matchesSize =
+      sizeFilter === 'Todas' || (item.size ?? '') === sizeFilter
+
+    const matchesMaterial =
+      materialFilter === 'Todas' || (item.material ?? '') === materialFilter
+
+    return (
+      matchesCategory &&
+      matchesSeason &&
+      matchesSearch &&
+      matchesBrand &&
+      matchesSize &&
+      matchesMaterial
+    )
   })
 
   return (
@@ -580,7 +599,7 @@ export default function Wardrobe() {
             <input
               id="wardrobe-search"
               type="search"
-              placeholder="Nombre, color o categoría"
+              placeholder="Nombre, color, marca, talla o material"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
@@ -613,6 +632,54 @@ export default function Wardrobe() {
               {SEASONS.map((season) => (
                 <option key={season} value={season}>
                   {season}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="filter-brand">Marca</label>
+            <select
+              id="filter-brand"
+              value={brandFilter}
+              onChange={(event) => setBrandFilter(event.target.value)}
+            >
+              <option value="Todas">Todas las marcas</option>
+              {[...new Set(items.map((item) => item.brand).filter((brand): brand is string => Boolean(brand)))].sort((a, b) => a.localeCompare(b, 'es')).map((brand) => (
+                <option key={brand} value={brand}>
+                  {brand}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="filter-size">Talla</label>
+            <select
+              id="filter-size"
+              value={sizeFilter}
+              onChange={(event) => setSizeFilter(event.target.value)}
+            >
+              <option value="Todas">Todas las tallas</option>
+              {[...new Set(items.map((item) => item.size).filter((size): size is string => Boolean(size)))].sort((a, b) => a.localeCompare(b, 'es', { numeric: true })).map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label htmlFor="filter-material">Material</label>
+            <select
+              id="filter-material"
+              value={materialFilter}
+              onChange={(event) => setMaterialFilter(event.target.value)}
+            >
+              <option value="Todas">Todos los materiales</option>
+              {[...new Set(items.map((item) => item.material).filter((material): material is string => Boolean(material)))].sort((a, b) => a.localeCompare(b, 'es')).map((material) => (
+                <option key={material} value={material}>
+                  {material}
                 </option>
               ))}
             </select>
