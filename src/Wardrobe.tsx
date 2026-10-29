@@ -374,6 +374,7 @@ export default function Wardrobe() {
       item.name.toLocaleLowerCase('es').includes(searchText) ||
       item.color.toLocaleLowerCase('es').includes(searchText) ||
       item.category.toLocaleLowerCase('es').includes(searchText) ||
+      item.season.toLocaleLowerCase('es').includes(searchText) ||
       (item.brand ?? '').toLocaleLowerCase('es').includes(searchText) ||
       (item.size ?? '').toLocaleLowerCase('es').includes(searchText) ||
       (item.material ?? '').toLocaleLowerCase('es').includes(searchText)
